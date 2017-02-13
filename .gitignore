@@ -1,2 +1,6 @@
 *.swp
 *.wav
+.*.dep
+*.o
+gen
+view

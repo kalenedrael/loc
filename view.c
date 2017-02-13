@@ -24,10 +24,9 @@ static int need_draw;
 
 /* data */
 static vec3_t mic_pos[] = {
-	{ .x = -0.5, .y = -0.5, .z = 0.0 },
-	{ .x =  0.5, .y = -0.5, .z = 0.0 },
-	{ .x =  0.5, .y =  0.5, .z = 0.0 },
-	{ .x = -0.5, .y =  0.5, .z = 0.0 },
+	{ .x = -0.5, .y = -RSQRT_3/2.0, .z = 0.0 },
+	{ .x =  0.5, .y = -RSQRT_3/2.0, .z = 0.0 },
+	{ .x =  0.0, .y =  RSQRT_3/1.0, .z = 0.0 },
 };
 #define N_MICS ARRAY_SIZE(mic_pos)
 static size_t n_samples;
