@@ -13,18 +13,11 @@
 #define BASELINE_DIST 5.0 /* distance at which null mic is capturing this sound. used for amplitude adjust */
 #define RESAMPLE_SIZE 3
 
-#define SINC_EPSILON 0.0001
-
-static vec3_t mic_pos[] = {
-	{ .x = -0.5, .y = -RSQRT_3/2.0, .z = 0.0 },
-	{ .x =  0.5, .y = -RSQRT_3/2.0, .z = 0.0 },
-	{ .x =  0.0, .y =  RSQRT_3/1.0, .z = 0.0 },
-};
-static const size_t N_MICS = ARRAY_SIZE(mic_pos);
+#include "mic.c"
 
 static inline real_t sinc(real_t x)
 {
-	if (x > -SINC_EPSILON && x < SINC_EPSILON) {
+	if (x == 0.0) {
 		return 1.0;
 	}
 

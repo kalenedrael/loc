@@ -20,12 +20,9 @@ typedef float real_t;
 #define GL_SIZE GL_FLOAT
 #endif /* USE_DOUBLE */
 
-#define FFT_LEN 512 /* samples */
+#define FFT_LEN 365 /* samples */
 #define SND_SPEED 343.0 /* m/s */
 #define XRES 1200
 #define YRES 1200
-
-#define RSQRT_3 0.57735026918962576451
-#define ARRAY_SIZE(a) (sizeof(a)/sizeof((a)[0]))
 
 #endif /* _GLOBALS_H_ */

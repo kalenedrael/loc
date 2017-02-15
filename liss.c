@@ -11,11 +11,11 @@ struct {
 	vec3_t trans;
 	real_t rt, rp;
 } liss_param = {
-	.duration = 8.0,
-	.period = { 1.0,    3.0, 0.0 },
+	.duration = 30.0,
+	.period = { 1.0,    1.0, 0.0 },
 	.phase  = { 0.0, M_PI/2, 0.0 },
-	.scale  = { 5.0,    3.5, 0.0 },
-	.trans  = { 0.0,    2.0, 0.0 },
+	.scale  = { 5.0,    3.0, 0.0 },
+	.trans  = { 0.0,    0.0, 0.0 },
 	.rt = 0.0, .rp = 0.0,
 };
 

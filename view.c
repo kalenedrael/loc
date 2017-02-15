@@ -20,20 +20,18 @@ static void reset();
 
 /* SDL stuff */
 static SDL_Surface *screen;
-static int need_draw;
+static int need_draw, need_update = 1;
 
 /* data */
-static vec3_t mic_pos[] = {
-	{ .x = -0.5, .y = -RSQRT_3/2.0, .z = 0.0 },
-	{ .x =  0.5, .y = -RSQRT_3/2.0, .z = 0.0 },
-	{ .x =  0.0, .y =  RSQRT_3/1.0, .z = 0.0 },
-};
-#define N_MICS ARRAY_SIZE(mic_pos)
+#include "mic.c"
+
 static size_t n_samples;
 static real_t *mic_data[N_MICS];
 static real_t sample_rate;
 static real_t xcor_res[N_MICS][FFT_LEN * 2 - 1];
 static int32_t distances[N_MICS][XRES*YRES];
+
+static int cur_time, old_time, paused;
 
 static void handle_event(SDL_Event *ev)
 {
@@ -43,11 +41,15 @@ static void handle_event(SDL_Event *ev)
 	case SDL_KEYDOWN:
 		switch(ev->key.keysym.sym) {
 		case SDLK_q: exit(0);
+		case SDLK_SPACE: paused = !paused;
 		default: return;
 		}
 	case SDL_USEREVENT: /* update event */
-		update();
-		need_draw = 1;
+		if (need_update) {
+			need_update = 0;
+			update();
+			need_draw = 1;
+		}
 	default:
 		return;
 	}
@@ -75,10 +77,24 @@ static int transform(vec3_t pos)
 	return clamp((-(int)scaled.y + YRES/2) * XRES + (int)scaled.x + XRES/2);
 }
 
+static void draw_mark(uint32_t *p, int pos, uint32_t color)
+{
+	for (int i = 0; i < 11; i++) {
+		p[clamp(pos + i - 5)] = color;
+	}
+	for (int i = 0; i < 11; i++) {
+		p[clamp(pos + (i - 5) * XRES)] = color;
+	}
+}
+
 static void update(void)
 {
-	int time = SDL_GetTicks();
-	size_t sample = (size_t)(time * sample_rate * 0.001);
+	int time = SDL_GetTicks(), dt = time - old_time;
+	old_time = time;
+	if (paused) return;
+
+	cur_time += dt;
+	size_t sample = (size_t)(cur_time * sample_rate * 0.001);
 
 	/* check if we're done */
 	if (sample >= n_samples - FFT_LEN) {
@@ -95,7 +111,7 @@ static void update(void)
 	for (int i = 0; i < XRES*YRES; i++) {
 		real_t acc = 1.0;
 		for (int j = 0; j < N_MICS; j++) {
-			size_t offset = distances[j][i] + FFT_LEN - 1;
+			size_t offset = distances[j][i];
 			acc *= xcor_res[j][offset];
 		}
 		uint32_t iacc = (uint32_t)(acc * 30.0);
@@ -103,15 +119,10 @@ static void update(void)
 	}
 
 	for (int i = 0; i < N_MICS; i++) {
-		p[transform(mic_pos[i])] = 0xFF0000;
+		draw_mark(p, transform(mic_pos[i]), 0xFF0000);
 	}
-	int pos = transform(liss_pos(time * 0.001));
-	for (int i = 0; i < 11; i++) {
-		p[clamp(pos + i - 5)] = 0xFFFF00;
-	}
-	for (int i = 0; i < 11; i++) {
-		p[clamp(pos + (i - 5) * XRES)] = 0xFFFF00;
-	}
+	int pos = transform(liss_pos(cur_time * 0.001));
+	draw_mark(p, pos, 0xFFFF00);
 #else
 	memset(p, 0, XRES*YRES*4);
 	for (int i = 0; i < FFT_LEN * 2 - 1; i++) {
@@ -218,7 +229,7 @@ static void init_pos(vec3_t mic0, vec3_t mic1, int32_t *dist, real_t sample_rate
 			pos.x = (real_t)(j - (XRES/2)) * SCALE;
 			real_t d0 = vec3_dist(pos, mic0);
 			real_t d1 = vec3_dist(pos, mic1);
-			dist[i * XRES + j] = (int32_t)((d0 - d1) / SND_SPEED * sample_rate);
+			dist[i * XRES + j] = (int32_t)round((d0 - d1) / SND_SPEED * sample_rate) + FFT_LEN;
 		}
 	}
 }
@@ -259,6 +270,7 @@ int main(int argc, char **argv)
 		if(need_draw) {
 			need_draw = 0;
 			draw_sw();
+			need_update = 1;
 		}
 	}
 
