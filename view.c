@@ -14,9 +14,7 @@
 #define SCALE 0.01 /* meters per pixel */
 
 /* function prototypes */
-static void draw();
 static void update();
-static void reset();
 
 /* SDL stuff */
 static SDL_Surface *screen;

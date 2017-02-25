@@ -11,33 +11,27 @@
 
 #define SND_SPEED 343.0 /* m/s */
 #define BASELINE_DIST 5.0 /* distance at which null mic is capturing this sound. used for amplitude adjust */
-#define RESAMPLE_SIZE 3
+#define RESAMPLE_SIZE 31 /* width of sinc kernel (number of samples in each direction) */
 
 #include "mic.c"
-
-static inline real_t sinc(real_t x)
-{
-	if (x == 0.0) {
-		return 1.0;
-	}
-
-	real_t rx = x * M_PI;
-	return sin(rx) / rx;
-}
 
 static real_t resample(real_t *data, size_t len, size_t base, real_t ds)
 {
 	real_t dsi = floor(ds), dsf = ds - dsi;
+	real_t sin_dsf = sin(dsf * M_PI) / M_PI, acc = 0.0;
 	ssize_t off = (ssize_t)dsi + base;
-	ssize_t i;
 
-	real_t acc = 0.0;
-	for (i = -RESAMPLE_SIZE; i < RESAMPLE_SIZE; i++) {
+	if (sin_dsf == 0.0) {
+		return off >= 0 && off < len ? data[off] : 0.0;
+	}
+
+	for (ssize_t i = -RESAMPLE_SIZE; i < RESAMPLE_SIZE; i++) {
 		ssize_t oi = i + off;
 		if (oi < 0 || oi >= len) {
 			continue;
 		}
-		acc += data[oi] * sinc((real_t)i + dsf);
+		real_t sin_x = i % 2 ? -sin_dsf : sin_dsf;
+		acc += data[oi] * (sin_x / ((real_t)i + dsf));
 	}
 	return acc;
 }
