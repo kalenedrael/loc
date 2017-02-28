@@ -1,4 +1,6 @@
 #include <math.h>
+#include <pthread.h>
+#include <stdatomic.h>
 #include <stdlib.h>
 #include <stdint.h>
 #include <stdio.h>
@@ -14,6 +16,15 @@
 #define RESAMPLE_SIZE 31 /* width of sinc kernel (number of samples in each direction) */
 
 #include "mic.c"
+
+typedef struct {
+	atomic_int index;
+	real_t *samples;
+	int16_t *out_samples;
+	char *filename;
+	size_t n_samples;
+	int32_t sample_rate;
+} param_t;
 
 static real_t resample(real_t *data, size_t len, size_t base, real_t ds)
 {
@@ -67,11 +78,36 @@ static void write_file(char *orig_fname, size_t num, int32_t rate, int16_t *data
 	printf("%s written\n", buf);
 }
 
+void *gen_thread(void *param_v)
+{
+	param_t *param = (param_t*)param_v;
+	int val;
+
+	while ((val = atomic_fetch_add(&param->index, 1)) < N_MICS) {
+		printf("starting mic: %d\n", val);
+		int16_t *out_samples = param->out_samples + param->n_samples * val;
+		gen_delay(param->samples, param->n_samples, (real_t)(param->sample_rate), mic_pos[val], out_samples);
+		write_file(param->filename, val, param->sample_rate, out_samples, param->n_samples);
+		printf("finished: %d\n", val);
+	}
+
+	return NULL;
+}
+
 int main(int argc, char **argv)
 {
+	int n_threads = 1;
+	pthread_t threads[N_MICS];
+	param_t params;
+
 	if (argc < 2) {
-		fprintf(stderr, "usage: %s <infile>\n", argv[0]);
+		fprintf(stderr, "usage: %s <infile> [number of threads]\n", argv[0]);
 		return 1;
+	}
+
+	if (argc >= 3) {
+		n_threads = atoi(argv[2]);
+		n_threads = n_threads < 1 ? 1 : n_threads > N_MICS ? N_MICS : n_threads;
 	}
 
 	wav_t wav;
@@ -81,16 +117,29 @@ int main(int argc, char **argv)
 		return 1;
 	}
 
-	int16_t *out_samples = (int16_t*)malloc(n_samples * 2);
+	int16_t *out_samples = (int16_t*)malloc(n_samples * sizeof(int16_t) * N_MICS);
 	if (out_samples == NULL) {
 		fprintf(stderr, "can't allocate space for output\n");
 		return 1;
 	}
 
 	printf("%s: rate %d, %lu samples\n", argv[1], wav.rate, n_samples);
-	for (size_t i = 0; i < N_MICS; i++) {
-		printf("mic: %lu\n", i);
-		gen_delay(samples, n_samples, (real_t)(wav.rate), mic_pos[i], out_samples);
-		write_file(argv[1], i, wav.rate, out_samples, n_samples);
+	printf("using %d threads\n", n_threads);
+
+	params.index = 0;
+	params.samples = samples;
+	params.out_samples = out_samples;
+	params.filename = argv[1];
+	params.n_samples = n_samples;
+	params.sample_rate = wav.rate;
+
+	memset(threads, 0, sizeof(threads));
+	for (int i = 0; i < n_threads; i++) {
+		pthread_create(&threads[i], NULL, gen_thread, &params);
 	}
+	for (int i = 0; i < n_threads; i++) {
+		pthread_join(threads[i], NULL);
+	}
+
+	return 0;
 }

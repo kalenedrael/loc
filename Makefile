@@ -1,8 +1,8 @@
 CC       := gcc
 INCLUDES := -I.
 CFLAGS   := -Wall -O2 -g
-LDFLAGS  := -lm
-LDFLAGS_VIEW := -lSDL -lGL -lfftw3f
+LDFLAGS_GEN  := -lm -lpthread
+LDFLAGS_VIEW := -lm -lSDL -lGL -lfftw3f
 
 EXEC_GEN  := gen
 EXEC_VIEW := view
@@ -22,10 +22,10 @@ ALL_DEPS = $(ALL_OBJS_DOT:.o=.dep)
 all: $(ALL_EXECS)
 
 $(EXEC_GEN): $(COMMON_OBJS) $(GEN_OBJS)
-	$(CC) -o $(EXEC_GEN) $(COMMON_OBJS) $(GEN_OBJS) $(CFLAGS) $(LDFLAGS)
+	$(CC) -o $(EXEC_GEN) $(COMMON_OBJS) $(GEN_OBJS) $(CFLAGS) $(LDFLAGS_GEN)
 
 $(EXEC_VIEW): $(COMMON_OBJS) $(VIEW_OBJS)
-	$(CC) -o $(EXEC_VIEW) $(COMMON_OBJS) $(VIEW_OBJS) $(CFLAGS) $(LDFLAGS) $(LDFLAGS_VIEW)
+	$(CC) -o $(EXEC_VIEW) $(COMMON_OBJS) $(VIEW_OBJS) $(CFLAGS) $(LDFLAGS_VIEW)
 
 %.o: %.c
 	@$(CC) $(INCLUDES) -MM -MP -MF $(dir $@).$(notdir $(basename $@)).dep -MT $@ $<

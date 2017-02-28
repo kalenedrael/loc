@@ -107,10 +107,10 @@ static void update(void)
 	uint32_t *p = screen->pixels;
 #if 1
 	for (int i = 0; i < XRES*YRES; i++) {
-		real_t acc = 1.0;
+		real_t acc = 0.0;
 		for (int j = 0; j < N_MICS; j++) {
 			size_t offset = distances[j][i];
-			acc *= xcor_res[j][offset];
+			acc += xcor_res[j][offset];
 		}
 		uint32_t iacc = (uint32_t)(acc * 30.0);
 		p[i] = acc > 0.0 ? (iacc > 255 ? 255 : iacc) : 0;
