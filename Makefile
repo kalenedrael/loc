@@ -2,12 +2,12 @@ CC       := gcc
 INCLUDES := -I.
 CFLAGS   := -Wall -O2 -g
 LDFLAGS_GEN  := -lm -lpthread
-LDFLAGS_VIEW := -lm -lSDL -lGL -lfftw3f
+LDFLAGS_VIEW := -lm -lSDL -lGL -lGLEW -lfftw3f
 
 EXEC_GEN  := gen
 EXEC_VIEW := view
 
-COMMON_OBJS := wav.o liss.o
+COMMON_OBJS := wav.o liss.o file.o
 GEN_OBJS := gen.o
 VIEW_OBJS := locate.o view.o
 

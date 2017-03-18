@@ -5,12 +5,13 @@
  */
 
 #include <SDL/SDL.h>
-#include <GL/gl.h>
+#include <GL/glew.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <time.h>
 #include <math.h>
 
+#include "file.h"
 #include "globals.h"
 #include "liss.h"
 #include "locate.h"
@@ -19,7 +20,8 @@
 
 #define XRES 1200
 #define YRES 1200
-#define SCALE 0.01 /* meters per pixel */
+#define WIDTH 12.0 /* meters */
+#define HEIGHT 12.0
 #define XCOR_LEN 4096 /* samples */
 #define XCOR_PLOT_LEN 1024
 
@@ -37,9 +39,11 @@ static size_t n_samples;
 static real_t *mic_data[N_MICS];
 static real_t sample_rate;
 static real_t xcor_res[N_MICS * XCOR_LEN];
-static int32_t distances[N_MICS][XRES*YRES];
 
 static int cur_time, old_time, paused;
+
+/* gl stuff */
+GLuint shd_field, shd_points;
 
 static void handle_event(SDL_Event *ev)
 {
@@ -71,30 +75,6 @@ static Uint32 timer_cb(Uint32 x, void* p)
 	return x;
 }
 
-static int clamp(int v)
-{
-	if (v < 0 || v >= XRES * YRES) {
-		return 0;
-	}
-	return v;
-}
-
-static int transform(vec3_t pos)
-{
-	vec3_t scaled = vec3_scale(pos, 1.0/SCALE);
-	return clamp((-(int)scaled.y + YRES/2) * XRES + (int)scaled.x + XRES/2);
-}
-
-static void draw_mark(uint32_t *p, int pos, uint32_t color)
-{
-	for (int i = 0; i < 11; i++) {
-		p[clamp(pos + i - 5)] = color;
-	}
-	for (int i = 0; i < 11; i++) {
-		p[clamp(pos + (i - 5) * XRES)] = color;
-	}
-}
-
 static void update(void)
 {
 	int time = SDL_GetTicks(), dt = time - old_time;
@@ -110,79 +90,135 @@ static void update(void)
 	}
 
 	locate_xcor(mic_data, sample, xcor_res);
-
-	SDL_LockSurface(screen);
-	uint32_t *p = screen->pixels;
-#if 0
-	/* draw the sound field */
-	for (int i = 0; i < XRES*YRES; i++) {
-		real_t acc = 1.0;
-		for (int j = 0; j < N_MICS; j++) {
-			size_t offset = distances[j][i];
-			acc *= xcor_res[j * XCOR_LEN + offset];
-		}
-		uint32_t iacc = (uint32_t)(acc * 3.0);
-		p[i] = acc > 0.0 ? (iacc > 255 ? 255 : iacc) : 0;
-	}
-
-	for (int i = 0; i < N_MICS; i++) {
-		draw_mark(p, transform(mic_pos[i]), 0xFF0000);
-	}
-	int pos = transform(liss_pos(cur_time * 0.001 + (XCOR_LEN / 2) / sample_rate));
-	draw_mark(p, pos, 0xFFFF00);
-#else
-	/* draw the raw cross-correlations (first 3) */
-	memset(p, 0, XRES*YRES*4);
-
-	/* draw y axis (delay = 0) */
-	for (int i = 0; i < YRES; i++) {
-		p[i * XRES + XCOR_PLOT_LEN / 2] = 0x0000FF;
-	}
-
-	for (int i = 0; i < 3; i++) {
-		int y_off = (i + 1) * YRES / 4;
-
-		/* draw x axis (y = 0) */
-		for (int j = 0; j < XCOR_PLOT_LEN; j++) {
-			p[y_off * XRES + j] = 0xFF0000;
-		}
-
-		/* draw y = 1 */
-		for (int j = 0; j < XCOR_PLOT_LEN; j++) {
-			p[(y_off - 30) * XRES + j] = 0xFFFF00;
-		}
-
-		/* plot cross-correlation */
-		for (int j = 0; j < XCOR_PLOT_LEN; j++) {
-			int y = y_off - (int)(xcor_res[i * XCOR_LEN + (XCOR_LEN - XCOR_PLOT_LEN) / 2 + j] * 30.0);
-			y = y < 0 ? 0 : y >= YRES ? YRES - 1 : y;
-			p[y * XRES + j] = 0xFFFFFF;
-		}
-	}
-#endif
-
-	SDL_UnlockSurface(screen);
 }
 
 static void draw(void)
 {
-	SDL_Flip(screen);
+	glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
+
+	glUseProgram(shd_field);
+	glBegin(GL_TRIANGLE_STRIP);
+	glVertex2f( WIDTH * 0.5,  HEIGHT * 0.5);
+	glVertex2f( WIDTH * 0.5, -HEIGHT * 0.5);
+	glVertex2f(-WIDTH * 0.5,  HEIGHT * 0.5);
+	glVertex2f(-WIDTH * 0.5, -HEIGHT * 0.5);
+	glEnd();
+
+	glUseProgram(shd_points);
+	glColor4f(1.0, 0.0, 0.0, 1.0);
+	glBegin(GL_POINTS);
+	for (int i = 0; i < N_MICS; i++) {
+		glVertex2f(mic_pos[i].x, mic_pos[i].y);
+	}
+	glColor3f(1.0, 1.0, 0.0);
+	vec3_t pos = liss_pos(cur_time * 0.001);
+	glVertex2f(pos.x, pos.y);
+	glEnd();
+
+	SDL_GL_SwapBuffers();
+}
+
+static GLuint load_shader(const char *file, GLint shader_type)
+{
+	ssize_t size;
+	const GLchar *source = file_read(file, &size);
+	if (source == NULL) {
+		return 0;
+	}
+
+	GLint size_int = (int)size;
+	GLuint shader = glCreateShader(shader_type);
+	glShaderSource(shader, 1, &source, &size_int);
+	glCompileShader(shader);
+	file_free((char*)source);
+
+	GLint compiled = 0;
+	glGetShaderiv(shader, GL_COMPILE_STATUS, &compiled);
+	if (compiled == GL_FALSE) {
+		GLint len = 0;
+		glGetShaderiv(shader, GL_INFO_LOG_LENGTH, &len);
+
+		GLchar *err = (GLchar *)malloc(len);
+		glGetShaderInfoLog(shader, len, &len, err);
+		fprintf(stderr, "%s: error compiling shader: %s\n", file, (char*)err);
+		glDeleteShader(shader);
+		return 0;
+	}
+
+	return shader;
+}
+
+static GLuint create_shader(const char *vert_file, const char *frag_file)
+{
+	GLuint program = glCreateProgram();
+	GLuint shader_vert = load_shader(vert_file, GL_VERTEX_SHADER);
+	GLuint shader_frag = load_shader(frag_file, GL_FRAGMENT_SHADER);
+
+	if (!shader_vert || !shader_frag) {
+		goto fail;
+	}
+
+	glAttachShader(program, shader_vert);
+	glAttachShader(program, shader_frag);
+	glLinkProgram(program);
+
+	GLint linked;
+	glGetProgramiv(program, GL_LINK_STATUS, &linked);
+	if (linked == GL_TRUE) {
+		glDetachShader(program, shader_vert);
+		glDetachShader(program, shader_frag);
+		glDeleteShader(shader_vert);
+		glDeleteShader(shader_frag);
+		return program;
+	}
+fail:
+	fprintf(stderr, "failed to load shader [%s] [%s]\n", vert_file, frag_file);
+	exit(1);
 }
 
 static void init(void)
 {
 	/* set up SDL */
 	screen = NULL;
-	if(SDL_Init(SDL_INIT_VIDEO | SDL_INIT_TIMER) < 0) {
+	if (SDL_Init(SDL_INIT_VIDEO | SDL_INIT_TIMER) < 0) {
 		fprintf(stderr, "init failed: %s\n", SDL_GetError());
 		exit(1);
 	}
 
-	screen = SDL_SetVideoMode(XRES, YRES, 32, SDL_SWSURFACE);
-	if(!screen) {
+	/* set up GL */
+	SDL_GL_SetAttribute(SDL_GL_DOUBLEBUFFER, 1);
+	screen = SDL_SetVideoMode(XRES, YRES, 32, SDL_OPENGL | SDL_HWSURFACE);
+	if (!screen) {
 		fprintf(stderr, "video mode init failed: %s\n", SDL_GetError());
 		exit(1);
 	}
+	GLenum glew_status = glewInit();
+	if (glew_status != GLEW_OK) {
+		fprintf(stderr, "glew init failed\n");
+		exit(1);
+	}
+
+	fprintf(stderr, "GL version: %s\n", glGetString(GL_VERSION));
+	fprintf(stderr, "GLSL version: %s\n", glGetString(GL_SHADING_LANGUAGE_VERSION));
+
+	/* (0,0) is upper left */
+	glMatrixMode(GL_MODELVIEW);
+	glLoadIdentity();
+	glOrtho(-WIDTH*0.5, WIDTH*0.5, -HEIGHT*0.5, HEIGHT*0.5, -1.0, 1.0);
+	glClearColor(0.0, 0.0, 0.0, 0.0);
+
+	glEnable(GL_PROGRAM_POINT_SIZE);
+	glEnable(GL_BLEND);
+	glBlendFuncSeparate(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA, GL_ONE, GL_ONE_MINUS_SRC_ALPHA);
+
+	glDisable(GL_LIGHTING);
+	glDisable(GL_CULL_FACE);
+	glDisable(GL_DEPTH_TEST);
+	glDisable(GL_TEXTURE_2D);
+	glDisable(GL_COLOR_MATERIAL);
+
+	shd_field = create_shader("shaders/field.vert", "shaders/field.frag");
+	shd_points = create_shader("shaders/points.vert", "shaders/points.frag");
 
 	SDL_WM_SetCaption("you can run, but you can't hide", "unless you're quiet");
 	atexit(SDL_Quit);
@@ -191,25 +227,9 @@ static void init(void)
 	locate_init(XCOR_LEN, N_MICS);
 
 	/* initialize update timer */
-	if(SDL_AddTimer(25, timer_cb, NULL) == NULL) {
+	if (SDL_AddTimer(25, timer_cb, NULL) == NULL) {
 		fprintf(stderr, "error setting update timer...\n");
 		exit(1);
-	}
-}
-
-static void init_pos(vec3_t mic0, vec3_t mic1, int32_t *dist, real_t sample_rate)
-{
-	vec3_t pos;
-	pos.z = 0.0;
-
-	for (int i = 0; i < YRES; i++) {
-		pos.y = (real_t)((YRES/2) - i) * SCALE;
-		for (int j = 0; j < XRES; j++) {
-			pos.x = (real_t)(j - (XRES/2)) * SCALE;
-			real_t d0 = vec3_dist(pos, mic0);
-			real_t d1 = vec3_dist(pos, mic1);
-			dist[i * XRES + j] = (int32_t)round((d0 - d1) / SND_SPEED * sample_rate) + XCOR_LEN/2;
-		}
 	}
 }
 
@@ -241,15 +261,11 @@ int main(int argc, char **argv)
 	n_samples = len;
 	sample_rate = (real_t)wav.rate;
 
-	for (int i = 0; i < N_MICS; i++) {
-		init_pos(mic_pos[i], mic_pos[(i + 1) % N_MICS], distances[i], sample_rate);
-	}
-
 	while (SDL_WaitEvent(&ev)) {
 		do {
 			handle_event(&ev);
 		} while (SDL_PollEvent(&ev));
-		if(need_draw) {
+		if (need_draw) {
 			need_draw = 0;
 			draw();
 			need_update = 1;

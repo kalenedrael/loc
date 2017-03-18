@@ -4,10 +4,10 @@
 #include <stdio.h>
 #include <string.h>
 #include <sys/types.h>
-#include <sys/stat.h>
 #include <unistd.h>
 
 #include "wav.h"
+#include "file.h"
 
 static wav_t wav_header_mono_16 = {
 	.ck_riff = {'R', 'I', 'F', 'F'},
@@ -28,31 +28,12 @@ static wav_t wav_header_mono_16 = {
 real_t *wav_read_mono_16(const char *filename, wav_t *wav_header, size_t *len_out)
 {
 	real_t *samples = NULL;
+	ssize_t size;
 
-	int fd = open(filename, O_RDONLY);
-	if (fd == -1) {
-		fprintf(stderr, "%s: error opening file\n", filename);
-		return NULL;
-	}
-
-	struct stat stats;
-	if (fstat(fd, &stats) == -1) {
-		fprintf(stderr, "%s: cannot stat file\n", filename);
-		return NULL;
-	}
-
-	char *file = (char*)malloc(stats.st_size);
+	char *file = file_read(filename, &size);
 	if (file == NULL) {
-		fprintf(stderr, "%s: cannot allocate enough space to read\n", filename);
-		return NULL;
-	}
-
-	ssize_t ret = read(fd, file, stats.st_size);
-	if (ret != stats.st_size) {
-		fprintf(stderr, "%s: cannot read entire file\n", filename);
 		goto out;
 	}
-	close(fd);
 
 	memcpy(wav_header, file, sizeof(*wav_header));
 	if (wav_header->chans != 1 || wav_header->bps != 16) {
@@ -61,7 +42,7 @@ real_t *wav_read_mono_16(const char *filename, wav_t *wav_header, size_t *len_ou
 	}
 
 	int16_t *data = (int16_t*)(file + sizeof(wav_t));
-	ssize_t len = (stats.st_size - sizeof(wav_t))/2;
+	ssize_t len = (size - sizeof(wav_t))/2;
 
 	samples = (real_t*)malloc(len * sizeof(real_t));
 	if (samples == NULL) {
@@ -76,7 +57,7 @@ real_t *wav_read_mono_16(const char *filename, wav_t *wav_header, size_t *len_ou
 	*len_out = len;
 
 out:
-	free(file);
+	file_free(file);
 	return samples;
 }
 
