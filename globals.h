@@ -20,7 +20,7 @@ typedef float real_t;
 #define GL_SIZE GL_FLOAT
 #endif /* USE_DOUBLE */
 
-#define FFT_LEN 365 /* samples */
+#define XCOR_LEN 512 /* samples */
 #define SND_SPEED 343.0 /* m/s */
 #define XRES 1200
 #define YRES 1200

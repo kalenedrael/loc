@@ -7,89 +7,147 @@
 
 #ifndef USE_DOUBLE
 #define fftw_plan fftwf_plan
-#define fftw_plan_dft_1d fftwf_plan_dft_1d
+#define fftw_plan_many_dft fftwf_plan_many_dft
 #define fftw_alloc_complex fftwf_alloc_complex
 #define fftw_execute fftwf_execute
 #define fftw_complex fftwf_complex
 #endif
 
-static size_t fft_len, fft_len_actual;
-static fftw_plan p0, p1, px;
-static fftw_complex *in0, *in1, *out0, *out1, *inx, *outx;
+static int fft_data_len, fft_len, fft_count, fft_buf_len;
+static fftw_plan plan_f, plan_r;
+static fftw_complex *in_f, *in_r, *out_f, *out_r;
 
-void locate_init(size_t n_samples)
+/** @brief Initializes locate
+ *  @param n_samples Number of samples to take from input data
+ *  @param n_mics Number of signals
+ *
+ *  Initializes `locate_xcor` to compute the cross-correlation of `n_mics`
+ *  input signals using `n_samples` samples from each one.
+ */
+void locate_init(int n_samples, int n_mics)
 {
-	size_t i;
+	fft_data_len = n_samples;
+	fft_len = fft_data_len * 2;
+	fft_buf_len = fft_len * n_mics;
+	fft_count = n_mics;
 
-	fft_len = n_samples;
-	fft_len_actual = fft_len * 2 - 1;
-	in0 = fftw_alloc_complex(fft_len_actual);
-	in1 = fftw_alloc_complex(fft_len_actual);
-	inx = fftw_alloc_complex(fft_len_actual);
+	in_f = fftw_alloc_complex(fft_buf_len);
+	in_r = fftw_alloc_complex(fft_buf_len);
 
-	out0 = fftw_alloc_complex(fft_len_actual);
-	out1 = fftw_alloc_complex(fft_len_actual);
-	outx = fftw_alloc_complex(fft_len_actual);
+	out_f = fftw_alloc_complex(fft_buf_len);
+	out_r = fftw_alloc_complex(fft_buf_len);
 
-	if (in0 == NULL || in1 == NULL || inx == NULL ||
-	    out0 == NULL || out1 == NULL || outx == NULL) {
+	if (in_f == NULL || in_r == NULL || out_f == NULL || out_r == NULL) {
 		fprintf(stderr, "failed to initialize locate");
 		exit(0);
 	}
 
-	p0 = fftw_plan_dft_1d(fft_len_actual, in0, out0, FFTW_FORWARD, FFTW_ESTIMATE);
-	p1 = fftw_plan_dft_1d(fft_len_actual, in1, out1, FFTW_FORWARD, FFTW_ESTIMATE);
-	px = fftw_plan_dft_1d(fft_len_actual, inx, outx, FFTW_BACKWARD, FFTW_ESTIMATE);
+	plan_f = fftw_plan_many_dft(1,              /* rank */
+	                            &fft_len,       /* dimensions */
+	                            fft_count,      /* number of FFTs */
 
-	for (i = 0; i < fft_len_actual; i++) {
-		in0[i] = 0.0;
-	}
-	for (i = 0; i < fft_len_actual; i++) {
-		in1[i] = 0.0;
+	                            /* buffer, embed, stride, distance */
+	                            in_f , NULL, 1, fft_len, /* input */
+	                            out_f, NULL, 1, fft_len, /* output */
+
+	                            FFTW_FORWARD,   /* direction */
+	                            FFTW_ESTIMATE); /* flags */
+
+	plan_r = fftw_plan_many_dft(1,              /* rank */
+	                            &fft_len,       /* dimensions */
+	                            fft_count,      /* number of FFTs */
+
+	                            /* buffer, embed, stride, distance */
+	                            in_r , NULL, 1, fft_len, /* input */
+	                            out_r, NULL, 1, fft_len, /* output */
+
+	                            FFTW_BACKWARD,  /* direction */
+	                            FFTW_ESTIMATE); /* flags */
+
+	for (size_t i = 0; i < fft_buf_len; i++) {
+		in_f[i] = 0.0;
 	}
 }
 
-void locate_xcor(real_t *d0, real_t *d1, real_t *res)
+/** @brief Computes cross-correlation of multiple arrays
+ *  @param data Array of arrays of input data
+ *  @param data_offset Offset in each data array to start reading data
+ *  @param res Result array - two-dimensional array of outputs
+ *
+ *  Computes the normalized cross-correlation between successive arrays of
+ *  input data, e.g. for 3 input arrays:
+ *
+ *  res[0] = xcor(data[0], data[1])
+ *  res[1] = xcor(data[1], data[2])
+ *  res[2] = xcor(data[2], data[0])
+ *
+ *  Each row of the result contains the normalized cross-correlation from
+ *  offset `-n_samples/2` to offset `n_samples/2`, with index `n_samples/2`
+ *  containing the 0-offset cross-correlation.
+ *
+ *  `res` is expected to be a `n_mics * n_samples` array.
+ */
+void locate_xcor(real_t **data, size_t data_offset, real_t *res)
 {
-	size_t i;
+	int i, j;
 
-	/* pad input signals to appropriate length */
-	for (i = 0; i < fft_len; i++) {
-		in0[i] = d0[i];
-	}
-	for (i = fft_len - 1; i < fft_len_actual; i++) {
-		in1[i] = d1[i - (fft_len - 1)];
-	}
-
-	fftw_execute(p0);
-	fftw_execute(p1);
-
-	/* multiply DFTs */
-	for (i = 0; i < fft_len_actual; i++) {
-		inx[i] = out0[i] * conj(out1[i]);
+	/* gather input data */
+	for (i = 0; i < fft_count; i++) {
+		int offset = i * fft_len;
+		real_t *src = data[i] + data_offset;
+		for (j = 0; j < fft_data_len; j++) {
+			in_f[j + offset] = src[j];
+		}
 	}
 
-	fftw_execute(px);
+	fftw_execute(plan_f);
 
-	/* scale to remove cross-correlation bias */
-	for (i = 0; i < fft_len_actual; i++) {
-		int d = abs((int)fft_len - (int)i - 1);
-		res[i] = outx[i] / (fft_len - d);
+	/* multiply each DFT by the conjugate of the next DFT */
+	for (i = 0; i < fft_buf_len; i++) {
+		if ((j = i + fft_len) >= fft_buf_len) {
+			j -= fft_buf_len;
+		}
+		in_r[i] = out_f[i] * conj(out_f[j]);
 	}
 
-	/* find max autocorrelation */
-	real_t cor0 = 0.0, cor1 = 0.0;
-	for (i = 0; i < fft_len; i++) {
-		cor0 += d0[i] * d0[i];
-	}
-	for (i = 0; i < fft_len; i++) {
-		cor1 += d1[i] * d1[i];
-	}
-	real_t max_cor = cor0 > cor1 ? cor0 : cor1;
+	fftw_execute(plan_r);
 
-	/* scale down by max autocorrelation */
-	real_t scale = 1.0 / max_cor;
-	for (i = 0; i < fft_len_actual; i++) {
-		res[i] = res[i] * scale;
+	/* copy (shifted) to result, scaling to remove partial overlap bias */
+	for (i = 0; i < fft_count; i++) {
+		int offset = i * fft_len;
+		int res_offset = i * fft_data_len;
+
+		for (j = 0; j < fft_data_len; j++) {
+			int d = abs((int)j - fft_data_len / 2);
+			int j_off = (j + fft_len - fft_data_len / 2) % fft_len;
+			res[res_offset + j] = out_r[offset + j_off] / (fft_data_len - d);
+		}
+	}
+
+	/* normalize: maximum possible cross-correlation of two signals is the
+	 * maximum of their autocorrelations
+	 */
+	real_t cor = 0.0, cor_prev = 0.0;
+
+	/* do the first signal twice */
+	for (i = 0; i < fft_count + 1; i++) {
+		int i_actual = i % fft_count;
+		real_t *src = data[i_actual] + data_offset;
+
+		/* find autocorrelation */
+		cor = 0.0;
+		for (j = 0; j < fft_data_len; j++) {
+			cor += src[j] * src[j];
+		}
+
+		/* scale down by max of this and previous autocorrelation */
+		if (i > 0) {
+			real_t scale = 1.0 / (cor > cor_prev ? cor : cor_prev);
+			for (j = 0; j < fft_data_len; j++) {
+				res[i_actual * fft_data_len + j] *= scale;
+			}
+		}
+
+		cor_prev = cor;
 	}
 }

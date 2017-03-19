@@ -26,7 +26,7 @@ static int need_draw, need_update = 1;
 static size_t n_samples;
 static real_t *mic_data[N_MICS];
 static real_t sample_rate;
-static real_t xcor_res[N_MICS][FFT_LEN * 2 - 1];
+static real_t xcor_res[N_MICS * XCOR_LEN];
 static int32_t distances[N_MICS][XRES*YRES];
 
 static int cur_time, old_time, paused;
@@ -95,24 +95,23 @@ static void update(void)
 	size_t sample = (size_t)(cur_time * sample_rate * 0.001);
 
 	/* check if we're done */
-	if (sample >= n_samples - FFT_LEN) {
+	if (sample >= n_samples - XCOR_LEN) {
 		exit(0);
 	}
 
-	for (size_t i = 0; i < N_MICS; i++) {
-		locate_xcor(mic_data[i] + sample, mic_data[(i + 1) % N_MICS] + sample, xcor_res[i]);
-	}
+	locate_xcor(mic_data, sample, xcor_res);
 
 	SDL_LockSurface(screen);
 	uint32_t *p = screen->pixels;
 #if 1
+	/* draw the sound field */
 	for (int i = 0; i < XRES*YRES; i++) {
-		real_t acc = 0.0;
+		real_t acc = 1.0;
 		for (int j = 0; j < N_MICS; j++) {
 			size_t offset = distances[j][i];
-			acc += xcor_res[j][offset];
+			acc *= xcor_res[j * XCOR_LEN + offset];
 		}
-		uint32_t iacc = (uint32_t)(acc * 30.0);
+		uint32_t iacc = (uint32_t)(acc * 10.0);
 		p[i] = acc > 0.0 ? (iacc > 255 ? 255 : iacc) : 0;
 	}
 
@@ -122,75 +121,37 @@ static void update(void)
 	int pos = transform(liss_pos(cur_time * 0.001));
 	draw_mark(p, pos, 0xFFFF00);
 #else
+	/* draw the raw cross-correlations (first 3) */
 	memset(p, 0, XRES*YRES*4);
-	for (int i = 0; i < FFT_LEN * 2 - 1; i++) {
-		int y = YRES/4 - (int)(xcor_res[0][i] * 10.0);
-		y = y < 0 ? 0 : y >= YRES ? YRES - 1 : y;
-		p[y * XRES + i] = 0xFFFFFF;
+
+	/* draw y axis (delay = 0) */
+	for (int i = 0; i < YRES; i++) {
+		p[i * XRES + XCOR_LEN / 2] = 0x0000FF;
 	}
-	for (int i = 0; i < FFT_LEN * 2 - 1; i++) {
-		int y = YRES/2 - (int)(xcor_res[1][i] * 10.0);
-		y = y < 0 ? 0 : y >= YRES ? YRES - 1 : y;
-		p[y * XRES + i] = 0xFFFFFF;
-	}
-	for (int i = 0; i < FFT_LEN * 2 - 1; i++) {
-		int y = 3*YRES/4 - (int)(xcor_res[2][i] * 10.0);
-		y = y < 0 ? 0 : y >= YRES ? YRES - 1 : y;
-		p[y * XRES + i] = 0xFFFFFF;
-	}
-	for (int i = 0; i < FFT_LEN * 2 - 1; i++) {
-		p[(YRES/2) * XRES + i] = 0xFF0000;
+
+	for (int i = 0; i < 3; i++) {
+		int y_off = (i + 1) * YRES / 4;
+
+		/* draw x axis (y = 0) */
+		for (int j = 0; j < XCOR_LEN; j++) {
+			p[y_off * XRES + j] = 0xFF0000;
+		}
+
+		/* plot cross-correlation */
+		for (int j = 0; j < XCOR_LEN; j++) {
+			int y = y_off - (int)(xcor_res[i * XCOR_LEN + j] * 30.0);
+			y = y < 0 ? 0 : y >= YRES ? YRES - 1 : y;
+			p[y * XRES + j] = 0xFFFFFF;
+		}
 	}
 #endif
+
 	SDL_UnlockSurface(screen);
 }
 
-static void draw_sw(void)
+static void draw(void)
 {
 	SDL_Flip(screen);
-}
-
-static void draw_gl(void)
-{
-	glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT |
-	        GL_STENCIL_BUFFER_BIT);
-
-	SDL_GL_SwapBuffers();
-}
-
-static void init_sw(void)
-{
-	screen = SDL_SetVideoMode(XRES, YRES, 32, SDL_SWSURFACE);
-	if(!screen) {
-		fprintf(stderr, "video mode init failed: %s\n", SDL_GetError());
-		exit(1);
-	}
-}
-
-static void init_gl(void)
-{
-	SDL_GL_SetAttribute(SDL_GL_STENCIL_SIZE, 8);
-	SDL_GL_SetAttribute(SDL_GL_DOUBLEBUFFER, 1);
-	screen = SDL_SetVideoMode(XRES, YRES, 32, SDL_OPENGL | SDL_HWSURFACE);
-	if(!screen) {
-		fprintf(stderr, "video mode init failed: %s\n", SDL_GetError());
-		exit(1);
-	}
-
-	/* set up GL
-	 * (0,0) is upper left
-	 */
-	glMatrixMode(GL_MODELVIEW);
-	glLoadIdentity();
-	glTranslatef(-1.0, 1.0, 0.0);
-	glScalef(2.0/XRES, -2.0/YRES, 1.0);
-	glClearColor(0.0, 0.0, 0.0, 0.0);
-
-	glDisable(GL_LIGHTING);
-	glDisable(GL_CULL_FACE);
-	glDisable(GL_DEPTH_TEST);
-	glDisable(GL_TEXTURE_2D);
-	glDisable(GL_COLOR_MATERIAL);
 }
 
 static void init(void)
@@ -201,13 +162,18 @@ static void init(void)
 		fprintf(stderr, "init failed: %s\n", SDL_GetError());
 		exit(1);
 	}
-	init_sw();
+
+	screen = SDL_SetVideoMode(XRES, YRES, 32, SDL_SWSURFACE);
+	if(!screen) {
+		fprintf(stderr, "video mode init failed: %s\n", SDL_GetError());
+		exit(1);
+	}
 
 	SDL_WM_SetCaption("you can run, but you can't hide", "unless you're quiet");
 	atexit(SDL_Quit);
 
 	/* initialize data structures */
-	locate_init(FFT_LEN);
+	locate_init(XCOR_LEN, N_MICS);
 
 	/* initialize update timer */
 	if(SDL_AddTimer(25, timer_cb, NULL) == NULL) {
@@ -227,7 +193,7 @@ static void init_pos(vec3_t mic0, vec3_t mic1, int32_t *dist, real_t sample_rate
 			pos.x = (real_t)(j - (XRES/2)) * SCALE;
 			real_t d0 = vec3_dist(pos, mic0);
 			real_t d1 = vec3_dist(pos, mic1);
-			dist[i * XRES + j] = (int32_t)round((d0 - d1) / SND_SPEED * sample_rate) + FFT_LEN;
+			dist[i * XRES + j] = (int32_t)round((d0 - d1) / SND_SPEED * sample_rate) + XCOR_LEN/2;
 		}
 	}
 }
@@ -267,7 +233,7 @@ int main(int argc, char **argv)
 		} while (SDL_PollEvent(&ev));
 		if(need_draw) {
 			need_draw = 0;
-			draw_sw();
+			draw();
 			need_update = 1;
 		}
 	}
