@@ -1,3 +1,9 @@
+/** @file view.c
+ *  @brief Plots likely positions of sound sources from multiple audio streams
+ *
+ *  Currently only meant to work with the simulated streams from `gen`.
+ */
+
 #include <SDL/SDL.h>
 #include <GL/gl.h>
 #include <stdio.h>

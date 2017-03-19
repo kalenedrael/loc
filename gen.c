@@ -1,3 +1,7 @@
+/** @file gen.c
+ *  @brief Program to generate simulated audio streams for `view`.
+ */
+
 #include <math.h>
 #include <pthread.h>
 #include <stdatomic.h>
@@ -12,7 +16,7 @@
 #include "wav.h"
 
 #define SND_SPEED 343.0 /* m/s */
-#define BASELINE_DIST 5.0 /* distance at which null mic is capturing this sound. used for amplitude adjust */
+#define BASELINE_DIST 5.0 /* distance associated with base input stream, used for amplitude adjust */
 #define RESAMPLE_SIZE 31 /* width of sinc kernel (number of samples in each direction) */
 
 #include "mic.c"
@@ -26,6 +30,17 @@ typedef struct {
 	int32_t sample_rate;
 } param_t;
 
+/** @brief Generates an interpolated sample at a given base plus delay
+ *  @param data Audio input data to sample
+ *  @param len Length of input data
+ *  @param base Base sample offset
+ *  @param ds Delay from base to sample at (in samples)
+ *  @return The interpolated sample at data[base + ds]
+ *
+ *  Uses a rectangular windowed sinc with RESAMPLE_SIZE * 2 samples. Maybe it
+ *  should be windowed better but in practice it doesn't matter much when the
+ *  kernel is wide enough. It's not for audiophiles anyway.
+ */
 static real_t resample(real_t *data, size_t len, size_t base, real_t ds)
 {
 	real_t dsi = floor(ds), dsf = ds - dsi;
@@ -47,6 +62,17 @@ static real_t resample(real_t *data, size_t len, size_t base, real_t ds)
 	return acc;
 }
 
+/** @brief Generates a varying-delay audio stream for a given microphone
+ *  @param data Input audio data
+ *  @param len Length of input data
+ *  @param rate Sample rate, in Hz
+ *  @param mic_pos Simulated microphone position
+ *  @param res Result; generated audio samples will be stored here
+ *
+ *  Simulates a sound source moving in a lissajous trajectory (see liss.c) and
+ *  emitting the given audio data being recorded by a microphone at the given
+ *  position.
+ */
 static void gen_delay(real_t *data, size_t len, real_t rate, vec3_t mic_pos, int16_t *res)
 {
 	size_t i;
@@ -57,13 +83,24 @@ static void gen_delay(real_t *data, size_t len, real_t rate, vec3_t mic_pos, int
 		real_t d0 = vec3_dist(source_pos, vec3_zero);
 		real_t d1 = vec3_dist(source_pos, mic_pos);
 		real_t dl = d0 - d1;
-		real_t amp = (BASELINE_DIST * BASELINE_DIST) / ((dl + BASELINE_DIST) * (dl + BASELINE_DIST));
+
+		/* sample and adjust amplitude: inverse linear, not inverse square */
+		real_t amp = BASELINE_DIST / (dl + BASELINE_DIST);
 		real_t sample = amp * resample(data, len, i, dl / SND_SPEED * rate);
-		int32_t isample = (int32_t)(sample * ((int32_t)INT16_MAX + 1));
+
+		/* scale to 16-bit int, round, and clamp sample */
+		int32_t isample = (int32_t)round(sample * ((int32_t)INT16_MAX + 1));
 		res[i] = isample > INT16_MAX ? INT16_MAX : (isample < INT16_MIN ? INT16_MIN : (int16_t)isample);
 	}
 }
 
+/** @brief Writes a sound stream to a file
+ *  @param orig_fname Original filename; assumed to end in .wav
+ *  @param num Number to append to filename
+ *  @param rate Sample rate, in Hz
+ *  @param data Audio samples to write
+ *  @param len Length of data
+ */
 static void write_file(char *orig_fname, size_t num, int32_t rate, int16_t *data, size_t len)
 {
 	char *fname = strdup(orig_fname);

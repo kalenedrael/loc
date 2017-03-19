@@ -19,6 +19,9 @@ struct {
 	.rt = 0.0, .rp = 0.0,
 };
 
+/** @brief Generates a point on a (hard-coded) lissajous path
+ *  @param t Time to generate for, in seconds
+ */
 vec3_t liss_pos(real_t t)
 {
 	real_t nt = t * M_PI * 2.0 / liss_param.duration;

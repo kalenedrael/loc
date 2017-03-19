@@ -17,6 +17,7 @@ typedef float real_t;
 #define sqrt(x) sqrtf(x)
 #define sin(x) sinf(x)
 #define floor(x) floorf(x)
+#define round(x) roundf(x)
 #define GL_SIZE GL_FLOAT
 #endif /* USE_DOUBLE */
 
