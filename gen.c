@@ -15,7 +15,6 @@
 #include "vector.h"
 #include "wav.h"
 
-#define SND_SPEED 343.0 /* m/s */
 #define BASELINE_DIST 5.0 /* distance associated with base input stream, used for amplitude adjust */
 #define RESAMPLE_SIZE 31 /* width of sinc kernel (number of samples in each direction) */
 

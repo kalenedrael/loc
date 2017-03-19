@@ -17,7 +17,10 @@
 #include "vector.h"
 #include "wav.h"
 
+#define XRES 1200
+#define YRES 1200
 #define SCALE 0.01 /* meters per pixel */
+#define XCOR_LEN 4096 /* samples */
 
 /* function prototypes */
 static void update();
@@ -117,14 +120,14 @@ static void update(void)
 			size_t offset = distances[j][i];
 			acc *= xcor_res[j * XCOR_LEN + offset];
 		}
-		uint32_t iacc = (uint32_t)(acc * 10.0);
+		uint32_t iacc = (uint32_t)(acc * 3.0);
 		p[i] = acc > 0.0 ? (iacc > 255 ? 255 : iacc) : 0;
 	}
 
 	for (int i = 0; i < N_MICS; i++) {
 		draw_mark(p, transform(mic_pos[i]), 0xFF0000);
 	}
-	int pos = transform(liss_pos(cur_time * 0.001));
+	int pos = transform(liss_pos(cur_time * 0.001 + (XCOR_LEN / 2) / sample_rate));
 	draw_mark(p, pos, 0xFFFF00);
 #else
 	/* draw the raw cross-correlations (first 3) */
