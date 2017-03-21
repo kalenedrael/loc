@@ -21,6 +21,7 @@
 #define YRES 1200
 #define SCALE 0.01 /* meters per pixel */
 #define XCOR_LEN 4096 /* samples */
+#define XCOR_PLOT_LEN 1024
 
 /* function prototypes */
 static void update();
@@ -112,7 +113,7 @@ static void update(void)
 
 	SDL_LockSurface(screen);
 	uint32_t *p = screen->pixels;
-#if 1
+#if 0
 	/* draw the sound field */
 	for (int i = 0; i < XRES*YRES; i++) {
 		real_t acc = 1.0;
@@ -135,20 +136,25 @@ static void update(void)
 
 	/* draw y axis (delay = 0) */
 	for (int i = 0; i < YRES; i++) {
-		p[i * XRES + XCOR_LEN / 2] = 0x0000FF;
+		p[i * XRES + XCOR_PLOT_LEN / 2] = 0x0000FF;
 	}
 
 	for (int i = 0; i < 3; i++) {
 		int y_off = (i + 1) * YRES / 4;
 
 		/* draw x axis (y = 0) */
-		for (int j = 0; j < XCOR_LEN; j++) {
+		for (int j = 0; j < XCOR_PLOT_LEN; j++) {
 			p[y_off * XRES + j] = 0xFF0000;
 		}
 
+		/* draw y = 1 */
+		for (int j = 0; j < XCOR_PLOT_LEN; j++) {
+			p[(y_off - 30) * XRES + j] = 0xFFFF00;
+		}
+
 		/* plot cross-correlation */
-		for (int j = 0; j < XCOR_LEN; j++) {
-			int y = y_off - (int)(xcor_res[i * XCOR_LEN + j] * 30.0);
+		for (int j = 0; j < XCOR_PLOT_LEN; j++) {
+			int y = y_off - (int)(xcor_res[i * XCOR_LEN + (XCOR_LEN - XCOR_PLOT_LEN) / 2 + j] * 30.0);
 			y = y < 0 ? 0 : y >= YRES ? YRES - 1 : y;
 			p[y * XRES + j] = 0xFFFFFF;
 		}

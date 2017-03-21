@@ -142,9 +142,9 @@ void locate_xcor(real_t **data, size_t data_offset, real_t *res)
 
 		/* scale down by max of this and previous autocorrelation */
 		if (i > 0) {
-			real_t scale = 1.0 / (cor > cor_prev ? cor : cor_prev);
+			real_t scale = 0.5 / (cor > cor_prev ? cor : cor_prev);
 			for (j = 0; j < fft_data_len; j++) {
-				res[i_actual * fft_data_len + j] *= scale;
+				res[(i - 1) * fft_data_len + j] *= scale;
 			}
 		}
 
