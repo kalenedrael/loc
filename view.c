@@ -217,19 +217,22 @@ int main(int argc, char **argv)
 {
 	SDL_Event ev;
 	wav_t wav;
+	char buf[256];
 
-	if (argc < N_MICS + 1) {
-		fprintf(stderr, "usage: %s <file 1> <file 2> ...\n", argv[0]);
+	if (argc < 2) {
+		fprintf(stderr, "usage: %s <file prefix>\n", argv[0]);
 		return 1;
 	}
 
 	init();
 
 	size_t len = 0;
-	for (size_t i = 0; i < N_MICS; i++) {
+	for (int i = 0; i < N_MICS; i++) {
 		size_t prev_len = len;
-		mic_data[i] = wav_read_mono_16(argv[i+1], &wav, &len);
-		if (prev_len > 0 && len != prev_len) {
+		snprintf(buf, 256, "%s.%d.wav", argv[1], i);
+		fprintf(stderr, "input %2d: %s\n", i, buf);
+		mic_data[i] = wav_read_mono_16(buf, &wav, &len);
+		if (mic_data[i] == NULL || prev_len > 0 && len != prev_len) {
 			fprintf(stderr, "dfuq?\n");
 			return 1;
 		}
