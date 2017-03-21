@@ -1,6 +1,6 @@
 #version 130
 
-varying vec2 coord;
+out vec2 coord;
 
 void main(void)
 {

@@ -23,7 +23,7 @@
 #define WIDTH 12.0 /* meters */
 #define HEIGHT 12.0
 #define XCOR_LEN 4096 /* samples */
-#define XCOR_PLOT_LEN 1024
+#define XCOR_TEX_LEN 512
 
 /* function prototypes */
 static void update();
@@ -44,6 +44,11 @@ static int cur_time, old_time, paused;
 
 /* gl stuff */
 GLuint shd_field, shd_points;
+GLuint tex_correlation;
+GLint u_correlation, u_mic_pos, u_samples_per_m;
+
+static float xcor_tex_data[N_MICS * XCOR_TEX_LEN];
+static float mic_pos_data[N_MICS * 3];
 
 static void handle_event(SDL_Event *ev)
 {
@@ -94,9 +99,26 @@ static void update(void)
 
 static void draw(void)
 {
+	/* copy cross-correlation data into texture buffer */
+	for (int i = 0; i < N_MICS; i++) {
+		int offset_i = i * XCOR_LEN + (XCOR_LEN - XCOR_TEX_LEN) / 2;
+		int offset_o = i * XCOR_TEX_LEN;
+		for (int j = 0; j < XCOR_TEX_LEN; j++) {
+			xcor_tex_data[j + offset_o] = xcor_res[j + offset_i];
+		}
+	}
+
 	glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 
+	/* render field */
 	glUseProgram(shd_field);
+	glUniform1i(u_correlation, 0);
+	glUniform1f(u_samples_per_m, sample_rate / SND_SPEED);
+	glUniform3fv(u_mic_pos, N_MICS, mic_pos_data);
+
+	glTexImage2D(GL_TEXTURE_2D, 0, GL_R32F, XCOR_TEX_LEN, N_MICS, 0,
+	             GL_RED, GL_FLOAT, xcor_tex_data);
+
 	glBegin(GL_TRIANGLE_STRIP);
 	glVertex2f( WIDTH * 0.5,  HEIGHT * 0.5);
 	glVertex2f( WIDTH * 0.5, -HEIGHT * 0.5);
@@ -104,6 +126,7 @@ static void draw(void)
 	glVertex2f(-WIDTH * 0.5, -HEIGHT * 0.5);
 	glEnd();
 
+	/* render points */
 	glUseProgram(shd_points);
 	glColor4f(1.0, 0.0, 0.0, 1.0);
 	glBegin(GL_POINTS);
@@ -111,7 +134,7 @@ static void draw(void)
 		glVertex2f(mic_pos[i].x, mic_pos[i].y);
 	}
 	glColor3f(1.0, 1.0, 0.0);
-	vec3_t pos = liss_pos(cur_time * 0.001);
+	vec3_t pos = liss_pos(cur_time * 0.001 + (real_t)(XCOR_LEN / 2) / sample_rate);
 	glVertex2f(pos.x, pos.y);
 	glEnd();
 
@@ -130,7 +153,7 @@ static GLuint load_shader(const char *file, GLint shader_type)
 	GLuint shader = glCreateShader(shader_type);
 	glShaderSource(shader, 1, &source, &size_int);
 	glCompileShader(shader);
-	file_free((char*)source);
+	file_free((void*)source);
 
 	GLint compiled = 0;
 	glGetShaderiv(shader, GL_COMPILE_STATUS, &compiled);
@@ -140,7 +163,7 @@ static GLuint load_shader(const char *file, GLint shader_type)
 
 		GLchar *err = (GLchar *)malloc(len);
 		glGetShaderInfoLog(shader, len, &len, err);
-		fprintf(stderr, "%s: error compiling shader: %s\n", file, (char*)err);
+		fprintf(stderr, "%s: error compiling shader:\n%s\n", file, (char*)err);
 		glDeleteShader(shader);
 		return 0;
 	}
@@ -201,12 +224,13 @@ static void init(void)
 	fprintf(stderr, "GL version: %s\n", glGetString(GL_VERSION));
 	fprintf(stderr, "GLSL version: %s\n", glGetString(GL_SHADING_LANGUAGE_VERSION));
 
-	/* (0,0) is upper left */
+	/* set up coordinates - (0,0) is middle */
 	glMatrixMode(GL_MODELVIEW);
 	glLoadIdentity();
 	glOrtho(-WIDTH*0.5, WIDTH*0.5, -HEIGHT*0.5, HEIGHT*0.5, -1.0, 1.0);
 	glClearColor(0.0, 0.0, 0.0, 0.0);
 
+	glEnable(GL_TEXTURE_2D);
 	glEnable(GL_PROGRAM_POINT_SIZE);
 	glEnable(GL_POINT_SPRITE);
 	glEnable(GL_BLEND);
@@ -215,11 +239,29 @@ static void init(void)
 	glDisable(GL_LIGHTING);
 	glDisable(GL_CULL_FACE);
 	glDisable(GL_DEPTH_TEST);
-	glDisable(GL_TEXTURE_2D);
 	glDisable(GL_COLOR_MATERIAL);
 
+	/* set up shaders and uniforms */
 	shd_field = create_shader("shaders/field.vert", "shaders/field.frag");
 	shd_points = create_shader("shaders/points.vert", "shaders/points.frag");
+
+	u_correlation = glGetUniformLocation(shd_field, "u_correlation");
+	u_mic_pos = glGetUniformLocation(shd_field, "u_mic_pos");
+	u_samples_per_m = glGetUniformLocation(shd_field, "u_samples_per_m");
+
+	/* set up cross-correlation texture */
+	glGenTextures(1, &tex_correlation);
+	glActiveTexture(GL_TEXTURE0);
+	glBindTexture(GL_TEXTURE_2D, tex_correlation);
+	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
+	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
+
+	/* get mic positions compatible with GL uniform */
+	for (int i = 0, j = 0; i < N_MICS; i++) {
+		mic_pos_data[j++] = mic_pos[i].x;
+		mic_pos_data[j++] = mic_pos[i].y;
+		mic_pos_data[j++] = mic_pos[i].z;
+	}
 
 	SDL_WM_SetCaption("you can run, but you can't hide", "unless you're quiet");
 	atexit(SDL_Quit);
