@@ -29,8 +29,13 @@
 static void update();
 
 /* SDL stuff */
+enum {
+	MODE_FIELD = 0,
+	MODE_PLOT = 1,
+};
+
 static SDL_Surface *screen;
-static int need_draw, need_update = 1;
+static int need_draw, need_update = 1, view_mode = MODE_FIELD;
 
 /* data */
 #include "mic.c"
@@ -43,7 +48,7 @@ static real_t xcor_res[N_MICS * XCOR_LEN];
 static int cur_time, old_time, paused;
 
 /* gl stuff */
-GLuint shd_field, shd_points;
+GLuint shd_field, shd_points, shd_plot;
 GLuint tex_correlation;
 GLint u_correlation, u_mic_pos, u_samples_per_m;
 
@@ -52,15 +57,22 @@ static float mic_pos_data[N_MICS * 3];
 
 static void handle_event(SDL_Event *ev)
 {
-	switch(ev->type) {
+	switch (ev->type) {
 	case SDL_QUIT:
 		exit(0);
 	case SDL_KEYDOWN:
-		switch(ev->key.keysym.sym) {
+		switch (ev->key.keysym.sym) {
 		case SDLK_q: exit(0);
-		case SDLK_SPACE: paused = !paused;
-		default: return;
+		case SDLK_SPACE: paused = !paused; break;
+		case SDLK_v:
+			switch (view_mode) {
+			case MODE_FIELD: view_mode = MODE_PLOT; break;
+			case MODE_PLOT:  view_mode = MODE_FIELD; break;
+			}
+			break;
+		default: break;
 		}
+		break;
 	case SDL_USEREVENT: /* update event */
 		if (need_update) {
 			need_update = 0;
@@ -97,27 +109,13 @@ static void update(void)
 	locate_xcor(mic_data, sample, xcor_res);
 }
 
-static void draw(void)
+static void draw_field(void)
 {
-	/* copy cross-correlation data into texture buffer */
-	for (int i = 0; i < N_MICS; i++) {
-		int offset_i = i * XCOR_LEN + (XCOR_LEN - XCOR_TEX_LEN) / 2;
-		int offset_o = i * XCOR_TEX_LEN;
-		for (int j = 0; j < XCOR_TEX_LEN; j++) {
-			xcor_tex_data[j + offset_o] = xcor_res[j + offset_i];
-		}
-	}
-
-	glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
-
 	/* render field */
 	glUseProgram(shd_field);
 	glUniform1i(u_correlation, 0);
 	glUniform1f(u_samples_per_m, sample_rate / SND_SPEED);
 	glUniform3fv(u_mic_pos, N_MICS, mic_pos_data);
-
-	glTexImage2D(GL_TEXTURE_2D, 0, GL_R32F, XCOR_TEX_LEN, N_MICS, 0,
-	             GL_RED, GL_FLOAT, xcor_tex_data);
 
 	glBegin(GL_TRIANGLE_STRIP);
 	glVertex2f( WIDTH * 0.5,  HEIGHT * 0.5);
@@ -137,6 +135,42 @@ static void draw(void)
 	vec3_t pos = liss_pos(cur_time * 0.001 + (real_t)(XCOR_LEN / 2) / sample_rate);
 	glVertex2f(pos.x, pos.y);
 	glEnd();
+}
+
+static void draw_plot(void)
+{
+	glUseProgram(shd_plot);
+	glUniform1i(u_correlation, 0);
+
+	glBegin(GL_TRIANGLE_STRIP);
+	glVertex2f( WIDTH * 0.5,  HEIGHT * 0.5);
+	glVertex2f( WIDTH * 0.5, -HEIGHT * 0.5);
+	glVertex2f(-WIDTH * 0.5,  HEIGHT * 0.5);
+	glVertex2f(-WIDTH * 0.5, -HEIGHT * 0.5);
+	glEnd();
+}
+
+static void draw(void)
+{
+	/* copy cross-correlation data into texture buffer */
+	for (int i = 0; i < N_MICS; i++) {
+		int offset_i = i * XCOR_LEN + (XCOR_LEN - XCOR_TEX_LEN) / 2;
+		int offset_o = i * XCOR_TEX_LEN;
+		for (int j = 0; j < XCOR_TEX_LEN; j++) {
+			xcor_tex_data[j + offset_o] = xcor_res[j + offset_i];
+		}
+	}
+
+	glTexImage2D(GL_TEXTURE_2D, 0, GL_R32F, XCOR_TEX_LEN, N_MICS, 0,
+	             GL_RED, GL_FLOAT, xcor_tex_data);
+
+	glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
+
+	if (view_mode == MODE_FIELD) {
+		draw_field();
+	} else if (view_mode == MODE_PLOT) {
+		draw_plot();
+	}
 
 	SDL_GL_SwapBuffers();
 }
@@ -244,6 +278,7 @@ static void init(void)
 	/* set up shaders and uniforms */
 	shd_field = create_shader("shaders/field.vert", "shaders/field.frag");
 	shd_points = create_shader("shaders/points.vert", "shaders/points.frag");
+	shd_plot = create_shader("shaders/plot.vert", "shaders/plot.frag");
 
 	u_correlation = glGetUniformLocation(shd_field, "u_correlation");
 	u_mic_pos = glGetUniformLocation(shd_field, "u_mic_pos");
@@ -295,7 +330,7 @@ int main(int argc, char **argv)
 		snprintf(buf, 256, "%s.%d.wav", argv[1], i);
 		fprintf(stderr, "input %2d: %s\n", i, buf);
 		mic_data[i] = wav_read_mono_16(buf, &wav, &len);
-		if (mic_data[i] == NULL || prev_len > 0 && len != prev_len) {
+		if (mic_data[i] == NULL || (prev_len > 0 && len != prev_len)) {
 			fprintf(stderr, "dfuq?\n");
 			return 1;
 		}
