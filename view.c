@@ -40,7 +40,7 @@ static int need_draw, need_update = 1, view_mode = MODE_FIELD;
 /* data */
 #include "mic.c"
 
-static size_t n_samples;
+static size_t n_samples, n_sources;
 static real_t *mic_data[N_MICS];
 static real_t sample_rate;
 static real_t xcor_res[N_MICS * XCOR_LEN];
@@ -132,8 +132,10 @@ static void draw_field(void)
 		glVertex2f(mic_pos[i].x, mic_pos[i].y);
 	}
 	glColor3f(1.0, 1.0, 0.0);
-	vec3_t pos = liss_pos(cur_time * 0.001 + (real_t)(XCOR_LEN / 2) / sample_rate);
-	glVertex2f(pos.x, pos.y);
+	for (int i = 0; i < n_sources; i++) {
+		vec3_t pos = liss_pos(cur_time * 0.001 + (real_t)(XCOR_LEN / 2) / sample_rate, i);
+		glVertex2f(pos.x, pos.y);
+	}
 	glEnd();
 }
 
@@ -317,8 +319,8 @@ int main(int argc, char **argv)
 	wav_t wav;
 	char buf[256];
 
-	if (argc < 2) {
-		fprintf(stderr, "usage: %s <file prefix>\n", argv[0]);
+	if (argc < 3) {
+		fprintf(stderr, "usage: %s <file_prefix> <n_sources>\n", argv[0]);
 		return 1;
 	}
 
@@ -337,6 +339,7 @@ int main(int argc, char **argv)
 	}
 
 	n_samples = len;
+	n_sources = atoi(argv[2]);
 	sample_rate = (real_t)wav.rate;
 
 	while (SDL_WaitEvent(&ev)) {

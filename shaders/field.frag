@@ -13,7 +13,7 @@ in vec2 coord;
 
 void main(void)
 {
-	float acc = 1.0;
+	float acc = 0.0;
 	for (int i = 0; i < N_MICS; i++) {
 		int i_next = (i + 1) % N_MICS;
 		vec3 p0 = u_mic_pos[i];
@@ -22,8 +22,12 @@ void main(void)
 		float dt = distance(p0, pos) - distance(p1, pos);
 		int ds = int(round(dt * u_samples_per_m));
 
-		acc *= clamp(texelFetch(u_correlation, ivec2(FFT_HALF + ds, i), 0).r, 0.0, 1.0);
+		acc += clamp(texelFetch(u_correlation, ivec2(FFT_HALF + ds, i), 0).r, 0.0, 1.0);
 	}
 
+	acc *= acc;
+	acc *= acc;
+	acc *= acc;
+	acc *= 0.00000005;
 	gl_FragColor = vec4(acc, acc, acc, 1.0);
 }

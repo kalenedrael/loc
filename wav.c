@@ -44,7 +44,7 @@ real_t *wav_read_mono_16(const char *filename, wav_t *wav_header, size_t *len_ou
 	int16_t *data = (int16_t*)(file + sizeof(wav_t));
 	ssize_t len = (size - sizeof(wav_t))/2;
 
-	samples = (real_t*)malloc(len * sizeof(real_t));
+	samples = malloc(len * sizeof(real_t));
 	if (samples == NULL) {
 		fprintf(stderr, "%s: cannot allocate memory for %lu samples\n", filename, len);
 		goto out;
@@ -77,8 +77,8 @@ int wav_write_mono_16(const char *filename, int32_t sample_rate, int16_t *data, 
 	}
 
 	memcpy(&wav_header, &wav_header_mono_16, sizeof(wav_header));
-	wav_header.size   += sample_rate * len * 2;
-	wav_header.d_size += sample_rate * len * 2;
+	wav_header.size   += data_len;
+	wav_header.d_size += data_len;
 	wav_header.rate    = sample_rate;
 	wav_header.byps    = sample_rate * 2;
 

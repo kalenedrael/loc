@@ -4,6 +4,6 @@
 #include "globals.h"
 #include "vector.h"
 
-vec3_t liss_pos(real_t t);
+vec3_t liss_pos(real_t t, int i);
 
 #endif /* _LISS_T_ */
