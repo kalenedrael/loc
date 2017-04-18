@@ -7,6 +7,7 @@ const int N_MICS = 12;
 
 uniform sampler2D u_correlation;
 uniform float u_samples_per_m;
+uniform float u_intensity;
 uniform vec3 u_mic_pos[N_MICS];
 
 in vec2 coord;
@@ -28,6 +29,6 @@ void main(void)
 	acc *= acc;
 	acc *= acc;
 	acc *= acc;
-	acc *= 0.00000005;
+	acc *= u_intensity;
 	gl_FragColor = vec4(acc, acc, acc, 1.0);
 }

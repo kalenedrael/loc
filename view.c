@@ -50,8 +50,9 @@ static int cur_time, old_time, paused;
 /* gl stuff */
 GLuint shd_field, shd_points, shd_plot;
 GLuint tex_correlation;
-GLint u_correlation, u_mic_pos, u_samples_per_m;
+GLint u_correlation, u_mic_pos, u_samples_per_m, u_intensity;
 
+static double intensity = 0.00000002;
 static float xcor_tex_data[N_MICS * XCOR_TEX_LEN];
 static float mic_pos_data[N_MICS * 3];
 
@@ -70,6 +71,8 @@ static void handle_event(SDL_Event *ev)
 			case MODE_PLOT:  view_mode = MODE_FIELD; break;
 			}
 			break;
+		case SDLK_LEFTBRACKET: intensity *= 0.5; break;
+		case SDLK_RIGHTBRACKET: intensity *= 2.0; break;
 		default: break;
 		}
 		break;
@@ -115,6 +118,7 @@ static void draw_field(void)
 	glUseProgram(shd_field);
 	glUniform1i(u_correlation, 0);
 	glUniform1f(u_samples_per_m, sample_rate / SND_SPEED);
+	glUniform1f(u_intensity, intensity);
 	glUniform3fv(u_mic_pos, N_MICS, mic_pos_data);
 
 	glBegin(GL_TRIANGLE_STRIP);
@@ -285,6 +289,7 @@ static void init(void)
 	u_correlation = glGetUniformLocation(shd_field, "u_correlation");
 	u_mic_pos = glGetUniformLocation(shd_field, "u_mic_pos");
 	u_samples_per_m = glGetUniformLocation(shd_field, "u_samples_per_m");
+	u_intensity = glGetUniformLocation(shd_field, "u_intensity");
 
 	/* set up cross-correlation texture */
 	glGenTextures(1, &tex_correlation);
@@ -341,6 +346,13 @@ int main(int argc, char **argv)
 	n_samples = len;
 	n_sources = atoi(argv[2]);
 	sample_rate = (real_t)wav.rate;
+
+	printf(
+		"space: pause\n"
+		"v: change view mode\n"
+		"[]: decrease/increase intensity\n"
+		"q: quit\n"
+	);
 
 	while (SDL_WaitEvent(&ev)) {
 		do {
