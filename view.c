@@ -22,7 +22,7 @@
 #define YRES 1200
 #define WIDTH 12.0 /* meters */
 #define HEIGHT 12.0
-#define XCOR_LEN 4096 /* samples */
+#define XCOR_LEN 2048 /* samples */
 #define XCOR_TEX_LEN 512
 
 /* function prototypes */
@@ -52,7 +52,7 @@ GLuint shd_field, shd_points, shd_plot;
 GLuint tex_correlation;
 GLint u_correlation, u_mic_pos, u_samples_per_m, u_intensity;
 
-static double intensity = 0.00000002;
+static double intensity = 0.0001;
 static float xcor_tex_data[N_MICS * XCOR_TEX_LEN];
 static float mic_pos_data[N_MICS * 3];
 

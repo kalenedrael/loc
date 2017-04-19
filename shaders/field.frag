@@ -28,7 +28,6 @@ void main(void)
 
 	acc *= acc;
 	acc *= acc;
-	acc *= acc;
 	acc *= u_intensity;
-	gl_FragColor = vec4(acc, acc, acc, 1.0);
+	gl_FragColor = vec4(acc * 0.24, acc * 0.3, acc, 1.0);
 }
