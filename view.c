@@ -321,8 +321,9 @@ static void init(void)
 int main(int argc, char **argv)
 {
 	SDL_Event ev;
-	wav_t wav;
 	char buf[256];
+	int32_t wav_rate;
+	size_t len = 0;
 
 	if (argc < 3) {
 		fprintf(stderr, "usage: %s <file_prefix> <n_sources>\n", argv[0]);
@@ -331,12 +332,11 @@ int main(int argc, char **argv)
 
 	init();
 
-	size_t len = 0;
 	for (int i = 0; i < N_MICS; i++) {
 		size_t prev_len = len;
 		snprintf(buf, 256, "%s.%d.wav", argv[1], i);
 		fprintf(stderr, "input %2d: %s\n", i, buf);
-		mic_data[i] = wav_read_mono_16(buf, &wav, &len);
+		mic_data[i] = wav_read_mono_16(buf, &wav_rate, &len);
 		if (mic_data[i] == NULL || (prev_len > 0 && len != prev_len)) {
 			fprintf(stderr, "dfuq?\n");
 			return 1;
@@ -345,7 +345,7 @@ int main(int argc, char **argv)
 
 	n_samples = len;
 	n_sources = atoi(argv[2]);
-	sample_rate = (real_t)wav.rate;
+	sample_rate = (real_t)wav_rate;
 
 	printf(
 		"space: pause\n"

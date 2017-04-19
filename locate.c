@@ -1,3 +1,7 @@
+/** @file locate.c
+ *  @brief Signal processing functions for audio source localization
+ */
+
 #include <complex.h>
 #include <fftw3.h>
 #include <stdlib.h>

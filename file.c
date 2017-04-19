@@ -1,3 +1,7 @@
+/** @file file.c
+ *  @brief File reading stuff
+ */
+
 #include <errno.h>
 #include <fcntl.h>
 #include <stdlib.h>
@@ -9,6 +13,11 @@
 
 #include "file.h"
 
+/** @brief Reads a file into memory
+ *  @param filename Name of file to read
+ *  @param size_out Output; number of bytes read
+ *  @return Pointer to file data, or NULL on failure
+ */
 void *file_read(const char *filename, ssize_t *size_out)
 {
 	void *file_data = NULL;
@@ -44,6 +53,9 @@ out:
 	return file_data;
 }
 
+/** @brief Frees file data returned by `file_read`
+ *  @param file_data File data to free
+ */
 void file_free(void *file_data)
 {
 	free(file_data);

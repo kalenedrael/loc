@@ -105,9 +105,8 @@ static void gen_delay(real_t *data, size_t len, real_t rate, int liss_idx,
  */
 static real_t **load_files(int n_files, char **fnames, size_t *n_samples_out, int32_t *sample_rate_out)
 {
-	wav_t wav;
 	size_t max_len = 0;
-	int32_t sample_rate = 0;
+	int32_t wav_rate, sample_rate = 0;
 
 	real_t **streams = calloc(n_files, sizeof(streams[0]));
 	size_t *stream_len = calloc(n_files, sizeof(stream_len[0]));
@@ -117,19 +116,19 @@ static real_t **load_files(int n_files, char **fnames, size_t *n_samples_out, in
 
 	/* load all files and track max stream length */
 	for (int i = 0; i < n_files; i++) {
-		streams[i] = wav_read_mono_16(fnames[i], &wav, &stream_len[i]);
+		streams[i] = wav_read_mono_16(fnames[i], &wav_rate, &stream_len[i]);
 		if (streams[i] == NULL) {
 			goto fail_load;
 		}
 
 		/* sample rates must be the same for all input files */
-		printf("%s: rate %d, %lu samples\n", fnames[i], wav.rate, stream_len[i]);
-		if (sample_rate && sample_rate != wav.rate) {
-			fprintf(stderr, "sample rate mismatch: current %d <> previous %d\n", wav.rate, sample_rate);
+		printf("%s: rate %d, %lu samples\n", fnames[i], wav_rate, stream_len[i]);
+		if (sample_rate && sample_rate != wav_rate) {
+			fprintf(stderr, "sample rate mismatch: current %d <> previous %d\n", wav_rate, sample_rate);
 			goto fail_load;
 		}
 
-		sample_rate = wav.rate;
+		sample_rate = wav_rate;
 		max_len = stream_len[i] > max_len ? stream_len[i] : max_len;
 	}
 
@@ -190,6 +189,7 @@ void *gen_thread(void *id_v)
 		int16_t *out_samples = param.out_samples + n_samples * thr_id;
 		real_t *out_acc = param.out_acc + n_samples * thr_id;
 
+		/* accumulate output streams */
 		printf("starting mic: %d\n", index);
 		memset(out_acc, 0, n_samples * sizeof(out_acc[0]));
 		for (int i = 0; i < param.n_streams; i++) {
