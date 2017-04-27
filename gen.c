@@ -49,7 +49,7 @@ real_t **input_streams;
  */
 static real_t resample(real_t *data, size_t len, size_t base, real_t ds)
 {
-	real_t dsi = floor(ds), dsf = ds - dsi;
+	real_t dsi = floor(ds), dsf = dsi + 1.0 - ds;
 	real_t sin_dsf = sin(dsf * M_PI) / M_PI, acc = 0.0;
 	ssize_t off = (ssize_t)dsi + base;
 
