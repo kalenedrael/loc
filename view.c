@@ -22,8 +22,10 @@
 #define YRES 1200
 #define WIDTH 12.0 /* meters */
 #define HEIGHT 12.0
-#define XCOR_LEN 2048 /* samples */
+
+#define XCOR_LEN 512 /* samples */
 #define XCOR_TEX_LEN 512
+#define XCOR_MUL 4 /* super-resolution factor */
 
 /* function prototypes */
 static void update();
@@ -43,7 +45,7 @@ static int need_draw, need_update = 1, view_mode = MODE_FIELD;
 static size_t n_samples, n_sources;
 static real_t *mic_data[N_MICS];
 static real_t sample_rate;
-static real_t xcor_res[N_MICS * XCOR_LEN];
+static real_t xcor_res[N_MICS * XCOR_LEN * XCOR_MUL];
 
 static int cur_time, old_time, paused;
 
@@ -53,7 +55,7 @@ GLuint tex_correlation;
 GLint u_correlation, u_mic_pos, u_samples_per_m, u_intensity;
 
 static double intensity = 0.0001;
-static float xcor_tex_data[N_MICS * XCOR_TEX_LEN];
+static float xcor_tex_data[N_MICS * XCOR_TEX_LEN * XCOR_MUL];
 static float mic_pos_data[N_MICS * 3];
 
 static void handle_event(SDL_Event *ev)
@@ -117,7 +119,7 @@ static void draw_field(void)
 	/* render field */
 	glUseProgram(shd_field);
 	glUniform1i(u_correlation, 0);
-	glUniform1f(u_samples_per_m, sample_rate / SND_SPEED);
+	glUniform1f(u_samples_per_m, (sample_rate * XCOR_MUL) / SND_SPEED);
 	glUniform1f(u_intensity, intensity);
 	glUniform3fv(u_mic_pos, N_MICS, mic_pos_data);
 
@@ -160,15 +162,15 @@ static void draw(void)
 {
 	/* copy cross-correlation data into texture buffer */
 	for (int i = 0; i < N_MICS; i++) {
-		int offset_i = i * XCOR_LEN + (XCOR_LEN - XCOR_TEX_LEN) / 2;
-		int offset_o = i * XCOR_TEX_LEN;
-		for (int j = 0; j < XCOR_TEX_LEN; j++) {
+		int offset_i = (i * XCOR_LEN + (XCOR_LEN - XCOR_TEX_LEN) / 2) * XCOR_MUL;
+		int offset_o = i * XCOR_TEX_LEN * XCOR_MUL;
+		for (int j = 0; j < XCOR_TEX_LEN * XCOR_MUL; j++) {
 			xcor_tex_data[j + offset_o] = xcor_res[j + offset_i];
 		}
 	}
 
-	glTexImage2D(GL_TEXTURE_2D, 0, GL_R32F, XCOR_TEX_LEN, N_MICS, 0,
-	             GL_RED, GL_FLOAT, xcor_tex_data);
+	glTexImage2D(GL_TEXTURE_2D, 0, GL_R32F, XCOR_TEX_LEN * XCOR_MUL, N_MICS,
+	             0, GL_RED, GL_FLOAT, xcor_tex_data);
 
 	glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 
@@ -309,7 +311,10 @@ static void init(void)
 	atexit(SDL_Quit);
 
 	/* initialize data structures */
-	locate_init(XCOR_LEN, N_MICS);
+	if (locate_init(XCOR_LEN, N_MICS, XCOR_MUL) < 0) {
+		fprintf(stderr, "locate init failed");
+		exit(1);
+	}
 
 	/* initialize update timer */
 	if (SDL_AddTimer(25, timer_cb, NULL) == NULL) {
