@@ -10,8 +10,10 @@ some 16-bit mono WAVs (split stereo into mono with audacity or something)
 To build: `make`
 
 To run:
-    ./gen <output prefix> <input wav 1> [input wav 2...]
-    ./view <input prefix> <number of sources>
+```
+./gen <output prefix> <input wav 1> [input wav 2...]
+./view <input prefix> <number of sources>
+```
 
 ## view
 
