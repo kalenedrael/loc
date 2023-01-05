@@ -16,18 +16,18 @@ typedef struct {
 
 liss_t liss_param[] = {
 	{
-		.duration = 30.0,
+		.duration = 15.0,
 		.period = { 1.0, 1.0, 0.0 },
 		.phase  = { 0.0, PI2, 0.0 },
-		.scale  = { 5.0, 3.0, 0.0 },
+		.scale  = { 2.0, 2.0, 0.0 },
 		.trans  = { 0.0, 0.0, 0.0 },
 		.rt = 0.0, .rp = 0.0,
 	},
 	{
-		.duration = 10.0,
-		.period = { 1.0, 2.0, 0.0 },
-		.phase  = { PI2, 0.0, 0.0 },
-		.scale  = { 3.0, 3.0, 0.0 },
+		.duration = 15.0,
+		.period = { 1.0, 1.0, 0.0 },
+		.phase  = { 0.0, PI2, 0.0 },
+		.scale  = { 5.0, 5.0, 0.0 },
 		.trans  = { 0.0, 0.0, 0.0 },
 		.rt = 0.0, .rp = 0.0,
 	},
